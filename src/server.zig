@@ -109,17 +109,13 @@ pub const Server = struct {
                     return try self.handleExists(arr);
                 } else if (std.mem.eql(u8, cmd_upper, "EXPIRE")) {
                     return try self.handleExpire(arr);
-                }
-
-                // else if (std.mem.eql(u8, cmd_upper, "TTL")) {
-                //     return try self.handleTTL(arr);
-                // } else if (std.mem.eql(u8, cmd_upper, "PERSIST")) {
-                //     return try self.handlePersist(arr);
-                // } else if (std.mem.eql(u8, cmd_upper, "KEYS")) {
-                //     return try self.handleKeys(arr);
-                // }
-
-                else {
+                } else if (std.mem.eql(u8, cmd_upper, "TTL")) {
+                    return try self.handleTTL(arr);
+                } else if (std.mem.eql(u8, cmd_upper, "PERSIST")) {
+                    return try self.handlePersist(arr);
+                } else if (std.mem.eql(u8, cmd_upper, "KEYS")) {
+                    return try self.handleKeys(arr);
+                } else {
                     return try resp.formatError(self.allocator, "ERR unknown command");
                 }
             },
@@ -243,5 +239,71 @@ pub const Server = struct {
 
         const success = try self.storage.expire(key, seconds);
         return try resp.formatInteger(self.allocator, if (success) 1 else 0);
+    }
+
+    fn handleTTL(self: *Server, args: []resp.RespValue) ![]u8 {
+        if (args.len != 2) {
+            return try resp.formatError(self.allocator, "ERR wrong number of arguments for 'TTL' command");
+        }
+
+        const key = switch (args[1]) {
+            .bulk_string => |s| s orelse {
+                return try resp.formatError(self.allocator, "ERR invalid key");
+            },
+            else => {
+                return try resp.formatError(self.allocator, "ERR invalid key type");
+            },
+        };
+
+        const ttl = self.storage.ttl(key);
+
+        if (ttl) |t| {
+            return try resp.formatInteger(self.allocator, t);
+        } else {
+            return try resp.formatInteger(self.allocator, -2);
+        }
+    }
+
+    fn handlePersist(self: *Server, args: []resp.RespValue) ![]u8 {
+        if (args.len != 2) {
+            return try resp.formatError(self.allocator, "ERR wrong number of arguments for 'persist' command");
+        }
+
+        const key = switch (args[1]) {
+            .bulk_string => |s| s orelse {
+                return try resp.formatError(self.allocator, "Err invalid key");
+            },
+            else => {
+                return try resp.formatError(self.allocator, "ERR invalid key type");
+            },
+        };
+
+        const success = try self.storage.persist(key);
+        return try resp.formatInteger(self.allocator, if (success) 1 else 0);
+    }
+
+    fn handleKeys(self: *Server, args: []resp.RespValue) ![]u8 {
+        if (args.len != 2) {
+            return try resp.formatError(self.allocator, "ERR wrong number of arguments for 'keys' command");
+        }
+
+        const pattern = switch (args[1]) {
+            .bulk_string => |s| s orelse {
+                return try resp.formatError(self.allocator, "ERR invalid pattern");
+            },
+            else => {
+                return try resp.formatError(self.allocator, "ERR invalid pattern type");
+            },
+        };
+
+        const key_list = try self.storage.keys(self.allocator, pattern);
+
+        defer {
+            for (key_list) |key| {
+                self.allocator.free(key);
+            }
+        }
+
+        return try resp.formatArray(self.allocator, key_list);
     }
 };

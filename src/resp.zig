@@ -177,3 +177,21 @@ pub fn formatSimpleString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
 pub fn formatInteger(allocator: std.mem.Allocator, value: i64) ![]u8 {
     return try std.fmt.allocPrint(allocator, ":{d}\r\n", .{value});
 }
+
+pub fn formatArray(allocator: std.mem.Allocator, items: [][]const u8) ![]u8 {
+    std.debug.print("formatArray called with {d} items\n", .{items.len});
+
+    var result = std.ArrayListUnmanaged(u8){};
+    errdefer result.deinit(allocator);
+
+    try result.writer(allocator).print("*{d}\r\n", .{items.len});
+
+    for (items, 0..) |item, i| {
+        std.debug.print("Item {d}: '{s}' (len={d})\n", .{ i, item, item.len });
+        try result.writer(allocator).print("${d}\r\n{s}\r\n", .{ item.len, item });
+    }
+
+    std.debug.print("formatArray completed\n", .{});
+
+    return try result.toOwnedSlice(allocator);
+}

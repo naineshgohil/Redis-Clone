@@ -158,8 +158,16 @@ pub const Storage = struct {
         return null;
     }
 
-    pub fn keys(self: *Storage, allocator: std.mem.Allocator, pattern: []const u8) !std.ArrayList([]const u8) {
-        var result = std.ArrayList([]const u8).init(allocator);
+    pub fn keys(self: *Storage, allocator: std.mem.Allocator, pattern: []const u8) ![][]const u8 {
+        var result = std.ArrayListUnmanaged([]const u8){};
+
+        errdefer {
+            for (result.items) |key| {
+                allocator.free(key);
+            }
+            result.deinit(allocator);
+        }
+
         var it = self.map.iterator();
 
         while (it.next()) |entry| {
@@ -169,11 +177,19 @@ pub const Storage = struct {
 
             if (std.mem.eql(u8, pattern, "*") or matchPattern(entry.key_ptr.*, pattern)) {
                 const key_copy = try allocator.dupe(u8, entry.key_ptr.*);
-                try result.append(key_copy);
+                errdefer allocator.free(key_copy);
+                try result.append(allocator, key_copy);
             }
         }
 
-        return result;
+        const slice = try result.toOwnedSlice(allocator);
+        std.debug.print("keys() returning {d} keys\n", .{slice.len});
+
+        for (slice, 0..) |key, i| {
+            std.debug.print("Key {d}: '{s}'\n", .{ i, key });
+        }
+
+        return slice;
     }
 };
 
@@ -189,4 +205,6 @@ fn matchPattern(str: []const u8, pattern: []const u8) bool {
             return std.mem.startsWith(u8, str, prefix);
         }
     }
+
+    return std.mem.eql(u8, str, pattern);
 }
