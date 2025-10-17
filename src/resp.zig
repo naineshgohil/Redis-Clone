@@ -158,18 +158,22 @@ pub const RespParser = struct {
     }
 };
 
-pub fn formatSimpleString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
-    return try std.fmt.allocPrint(allocator, "+{s}\r\n", .{str});
-}
-
-pub fn formatError(allocator: std.mem.Allocator, err: []const u8) ![]u8 {
-    return try std.fmt.allocPrint(allocator, "-{s}\r\n", .{err});
-}
-
 pub fn formatBulkString(allocator: std.mem.Allocator, str: ?[]const u8) ![]u8 {
     if (str) |s| {
         return try std.fmt.allocPrint(allocator, "${d}\r\n{s}\r\n", .{ s.len, s });
     } else {
         return try allocator.dupe(u8, "$-1\r\n");
     }
+}
+
+pub fn formatError(allocator: std.mem.Allocator, err: []const u8) ![]u8 {
+    return try std.fmt.allocPrint(allocator, "-{s}\r\n", .{err});
+}
+
+pub fn formatSimpleString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
+    return try std.fmt.allocPrint(allocator, "+{s}\r\n", .{str});
+}
+
+pub fn formatInteger(allocator: std.mem.Allocator, value: i64) ![]u8 {
+    return try std.fmt.allocPrint(allocator, ":{d}\r\n", .{value});
 }

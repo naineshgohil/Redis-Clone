@@ -103,7 +103,23 @@ pub const Server = struct {
                     return try self.handleSet(arr);
                 } else if (std.mem.eql(u8, cmd_upper, "GET")) {
                     return try self.handleGet(arr);
-                } else {
+                } else if (std.mem.eql(u8, cmd_upper, "DEL")) {
+                    return try self.handleDel(arr);
+                } else if (std.mem.eql(u8, cmd_upper, "EXISTS")) {
+                    return try self.handleExists(arr);
+                } else if (std.mem.eql(u8, cmd_upper, "EXPIRE")) {
+                    return try self.handleExpire(arr);
+                }
+
+                // else if (std.mem.eql(u8, cmd_upper, "TTL")) {
+                //     return try self.handleTTL(arr);
+                // } else if (std.mem.eql(u8, cmd_upper, "PERSIST")) {
+                //     return try self.handlePersist(arr);
+                // } else if (std.mem.eql(u8, cmd_upper, "KEYS")) {
+                //     return try self.handleKeys(arr);
+                // }
+
+                else {
                     return try resp.formatError(self.allocator, "ERR unknown command");
                 }
             },
@@ -156,5 +172,76 @@ pub const Server = struct {
 
         const value = self.storage.get(key);
         return try resp.formatBulkString(self.allocator, value);
+    }
+
+    fn handleDel(self: *Server, args: []resp.RespValue) ![]u8 {
+        if (args.len < 2) {
+            return try resp.formatError(self.allocator, "ERR wrong number of arguments for 'del' command");
+        }
+
+        var deleted_count: i64 = 0;
+        for (args[1..]) |arg| {
+            const key = switch (arg) {
+                .bulk_string => |s| s orelse continue,
+                else => continue,
+            };
+
+            if (try self.storage.delete(key)) {
+                deleted_count += 1;
+            }
+        }
+
+        return try resp.formatInteger(self.allocator, deleted_count);
+    }
+
+    fn handleExists(self: *Server, args: []resp.RespValue) ![]u8 {
+        if (args.len < 2) {
+            return try resp.formatError(self.allocator, "ERR wrong number of arguments for 'exists' command");
+        }
+
+        var exists_count: i64 = 0;
+        for (args[1..]) |arg| {
+            const key = switch (arg) {
+                .bulk_string => |s| s orelse continue,
+                else => continue,
+            };
+
+            if (self.storage.exists(key)) {
+                exists_count += 1;
+            }
+        }
+
+        return try resp.formatInteger(self.allocator, exists_count);
+    }
+
+    fn handleExpire(self: *Server, args: []resp.RespValue) ![]u8 {
+        if (args.len != 3) {
+            return try resp.formatError(self.allocator, "ERR wrong number of arguments for 'expire' command");
+        }
+
+        const key = switch (args[1]) {
+            .bulk_string => |s| s orelse {
+                return try resp.formatError(self.allocator, "ERR invalid key");
+            },
+            else => {
+                return try resp.formatError(self.allocator, "ERR invalid key type");
+            },
+        };
+
+        const seconds_str = switch (args[2]) {
+            .bulk_string => |s| s orelse {
+                return try resp.formatError(self.allocator, "ERR invalid seconds");
+            },
+            else => {
+                return try resp.formatError(self.allocator, "ERR invalid seconds type");
+            },
+        };
+
+        const seconds = std.fmt.parseInt(i64, seconds_str, 10) catch {
+            return try resp.formatError(self.allocator, "ERR value is not an integer or out of range");
+        };
+
+        const success = try self.storage.expire(key, seconds);
+        return try resp.formatInteger(self.allocator, if (success) 1 else 0);
     }
 };
